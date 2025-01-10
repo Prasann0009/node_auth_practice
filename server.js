@@ -4,14 +4,17 @@ const mongoose = require("mongoose");
 const userSchema = require("./schemas/userSchema");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const cookieParser = require("cookie-parser");
 
 //constants
 const app = express();
 const PORT = process.env.PORT;
 
+//middlewares
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.set("view engine", "ejs");
+app.use(cookieParser());
 
 //db Connection
 mongoose
@@ -20,10 +23,32 @@ mongoose
   .catch((err) => console.log(err));
 
 app.get("/", (req, res) => {
-  return res.send({
-    status: 200,
-    message: "server is up and running!",
-  });
+  return res.send(`<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+  </head>
+  <body>
+    <form action="register" method="get">
+      <button>Register</button>
+    </form>
+
+    <form action="login" method="get">
+      <button>Login</button>
+    </form>
+  </body>
+</html>
+`);
+});
+
+app.get("/register", (req, res) => {
+  return res.render("registerPage");
+});
+
+app.get("/login", (req, res) => {
+  return res.render("loginPage");
 });
 
 app.post("/register", async (req, res) => {
@@ -50,8 +75,9 @@ app.post("/register", async (req, res) => {
 
     await newUser.save();
 
-    res.status(201).json({ message: "User registered successfully" });
+    res.redirect("/login");
   } catch (error) {
+    console.log(error);
     res.status(500).json({
       message: "server error",
       error: error,
@@ -80,10 +106,14 @@ app.post("/login", async (req, res) => {
     //Generate Token
     const token = jwt.sign(username, process.env.SECRET_KEY);
 
-    res.status(200).json({
-      message: "Login Successfull",
-      token: token,
+    res.cookie("authToken", token, {
+      httpOnly: true, //Prevent Javascript access to the cookie
+      secure: process.env.NODE_ENV === "production", //Use secure cookies only in production
+      sameSite: "strict", //prevent CSRF
+      // maxAge: 60 * 60 * 1000, // 1 hour
     });
+
+    res.redirect("/dashboard");
   } catch (error) {
     res.status(500).json({
       message: "server error",
@@ -93,8 +123,10 @@ app.post("/login", async (req, res) => {
 });
 
 const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers["authorization"];
-  const token = authHeader && authHeader.split(" ")[1];
+  // const authHeader = req.headers["authorization"];
+  // const token = authHeader && authHeader.split(" ")[1];
+
+  const token = req.cookies.authToken;
 
   if (token === null) {
     return res.status(401).json({
@@ -112,10 +144,12 @@ const authenticateToken = (req, res, next) => {
 };
 
 app.get("/dashboard", authenticateToken, (req, res) => {
-  return res.json({
-    message: "On Dashboard",
-  });
+  return res.send(`On Dashboard, Username:- ${req.user}`);
+  // return res.json({
+  //   message: "On Dashboard",
+  //   user: req.user,
+  // });
 });
 app.listen(PORT, () => {
-  console.log(`server is running on port:- ${PORT}`);
+  console.log(`server is running on URL:- ${process.env.URL}`);
 });
